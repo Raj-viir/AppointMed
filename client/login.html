@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sign in to your AppointEase account.">
+    <title>Sign In — AppointEase</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="logo">
+                <h1>📅 AppointEase</h1>
+                <p>Sign in to your account</p>
+            </div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
+                    Sign In
+                </button>
+            </form>
+
+            <div class="auth-links">
+                <a href="/forgot-password.html">Forgot password?</a>
+                <br><br>
+                Don't have an account? <a href="/register.html">Sign up</a>
+                <br><br>
+                <a href="/">← Browse without signing in</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { authAPI, showToast, getUser } from '/js/api.js';
+
+        if (getUser()) {
+            window.location.href = '/dashboard.html';
+        }
+
+        const form = document.getElementById('loginForm');
+        const btn = document.getElementById('loginBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Signing in...';
+
+            try {
+                const user = await authAPI.login({ email, password });
+                showToast(`Welcome back, ${user.name}!`, 'success');
+                setTimeout(() => window.location.href = '/dashboard.html', 800);
+            } catch (err) {
+                showToast(err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Sign In';
+            }
+        });
+    </script>
+</body>
+</html>

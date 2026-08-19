@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AppointEase — Find doctors and book appointments online.">
+    <title>AppointEase — Book Doctor Appointments</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 32px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        .topbar .brand {
+            font-size: 22px;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .topbar-actions { display: flex; gap: 12px; align-items: center; }
+        .hero {
+            text-align: center;
+            padding: 64px 20px 48px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .hero h1 {
+            font-size: 40px;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 16px;
+        }
+        .hero h1 span {
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero p { color: var(--text-secondary); font-size: 17px; max-width: 500px; margin: 0 auto; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 24px 60px; }
+        .section-title { font-size: 22px; font-weight: 600; margin-bottom: 24px; }
+    </style>
+</head>
+<body>
+    <!-- Top Bar -->
+    <header class="topbar">
+        <div class="brand">📅 AppointEase</div>
+        <div class="topbar-actions" id="topbarActions"></div>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+        <h1>Find the right <span>Doctor</span>, book in seconds</h1>
+        <p>Browse verified doctors, check real-time availability, and book appointments — all in one place.</p>
+    </section>
+
+    <!-- Search & Doctor List -->
+    <div class="container">
+        <div class="search-bar">
+            <input type="text" id="searchName" placeholder="🔍 Search by name...">
+            <input type="text" id="filterSpeciality" placeholder="Speciality...">
+            <input type="text" id="filterCity" placeholder="City...">
+            <button class="btn btn-secondary btn-sm" id="searchBtn">Search</button>
+        </div>
+
+        <h2 class="section-title">Available Doctors</h2>
+        <div class="card-grid" id="doctorList">
+            <div class="loading-overlay"><span class="spinner"></span></div>
+        </div>
+    </div>
+
+    <!-- Booking Modal Root -->
+    <div id="modalRoot"></div>
+
+    <script type="module">
+        import { doctorAPI, appointmentAPI, getUser, showToast, authAPI } from '/js/api.js';
+
+        const user = getUser();
+
+        // --- Top Bar: show login/register or user info ---
+        const topbar = document.getElementById('topbarActions');
+        if (user) {
+            topbar.innerHTML = `
+                <span style="color:var(--text-secondary); font-size:14px;">Hi, <strong>${user.name}</strong></span>
+                <a href="/dashboard.html" class="btn btn-secondary btn-sm">Dashboard</a>
+                <button class="btn btn-outline btn-sm" id="logoutBtn">Logout</button>`;
+            document.getElementById('logoutBtn').addEventListener('click', () => authAPI.logout());
+        } else {
+            topbar.innerHTML = `
+                <a href="/login.html" class="btn btn-secondary btn-sm">Sign In</a>
+                <a href="/register.html" class="btn btn-primary btn-sm">Sign Up</a>`;
+        }
+
+        // --- Load Doctors ---
+        async function loadDoctors(params = {}) {
+            const list = document.getElementById('doctorList');
+            list.innerHTML = '<div class="loading-overlay"><span class="spinner"></span></div>';
+            try {
+                const res = await doctorAPI.getList(params);
+                const doctors = res.data || [];
+                if (!doctors.length) {
+                    list.innerHTML = '<div class="empty-state"><div class="icon">🩺</div><p>No doctors found. Try a different search.</p></div>';
+                    return;
+                }
+                list.innerHTML = doctors.map(d => `
+                    <div class="card">
+                        <div class="doctor-card">
+                            <div class="doctor-avatar">${(d.user?.name || 'D')[0].toUpperCase()}</div>
+                            <div class="doctor-info">
+                                <h3>Dr. ${d.user?.name || 'Unknown'}</h3>
+                                <p>${d.speciality || 'General Physician'}</p>
+                                <div class="doctor-meta">
+                                    <span>⏱ ${d.experience} yrs exp</span>
+                                    ${d.clinicAddress?.city ? `<span>📍 ${d.clinicAddress.city}${d.clinicAddress.state ? ', ' + d.clinicAddress.state : ''}</span>` : ''}
+                                    <span>🎓 ${(d.qualifications || []).join(', ')}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top:16px; display:flex; gap:8px;">
+                            <button class="btn btn-primary btn-sm" data-book="${d.user?._id}" data-name="${d.user?.name}">📅 Book Appointment</button>
+                            <button class="btn btn-outline btn-sm" data-check="${d.user?._id}" data-name="${d.user?.name}">Check Availability</button>
+                        </div>
+                    </div>`).join('');
+            } catch (err) {
+                list.innerHTML = `<div class="empty-state"><p>${err.message}</p></div>`;
+            }
+        }
+
+        loadDoctors();
+
+        // --- Search ---
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            const params = {};
+            const s = document.getElementById('searchName').value.trim();
+            const sp = document.getElementById('filterSpeciality').value.trim();
+            const c = document.getElementById('filterCity').value.trim();
+            if (s) params.search = s;
+            if (sp) params.speciality = sp;
+            if (c) params.city = c;
+            loadDoctors(params);
+        });
+
+        // --- Doctor Actions ---
+        document.getElementById('doctorList').addEventListener('click', async (e) => {
+            const bookBtn = e.target.closest('[data-book]');
+            const checkBtn = e.target.closest('[data-check]');
+
+            if (bookBtn) {
+                if (!user) {
+                    showToast('Please sign in to book an appointment', 'info');
+                    setTimeout(() => window.location.href = '/login.html', 1200);
+                    return;
+                }
+                showBookingModal(bookBtn.dataset.book, bookBtn.dataset.name);
+            }
+
+            if (checkBtn) {
+                showAvailabilityModal(checkBtn.dataset.check, checkBtn.dataset.name);
+            }
+        });
+
+        // --- Availability Modal (public) ---
+        function showAvailabilityModal(doctorId, doctorName) {
+            const today = new Date().toISOString().split('T')[0];
+            const root = document.getElementById('modalRoot');
+            root.innerHTML = `
+                <div class="modal-overlay" id="modalOverlay">
+                    <div class="modal">
+                        <h3>Dr. ${doctorName} — Availability</h3>
+                        <div class="form-group"><label>Select Date</label><input type="date" id="checkDate" min="${today}"></div>
+                        <div id="slotsDisplay"></div>
+                        <div class="modal-actions"><button class="btn btn-secondary" id="closeModalBtn">Close</button></div>
+                    </div>
+                </div>`;
+            document.getElementById('closeModalBtn').addEventListener('click', () => root.innerHTML = '');
+            document.getElementById('modalOverlay').addEventListener('click', (e) => { if (e.target.id === 'modalOverlay') root.innerHTML = ''; });
+            document.getElementById('checkDate').addEventListener('change', async (e) => {
+                const area = document.getElementById('slotsDisplay');
+                area.innerHTML = '<span class="spinner"></span>';
+                try {
+                    const res = await doctorAPI.checkAvailability(doctorId, e.target.value);
+                    const slots = res.data || [];
+                    if (!slots.length) { area.innerHTML = '<p class="text-muted mt-2">No available slots on this date</p>'; return; }
+                    area.innerHTML = '<p class="text-sm text-muted mt-2" style="margin-bottom:8px">AVAILABLE SLOTS</p><div class="slot-grid">' +
+                        slots.map(s => `<span class="slot-btn" style="cursor:default">${s}</span>`).join('') + '</div>';
+                } catch (err) { area.innerHTML = `<p class="text-muted mt-2">${err.message}</p>`; }
+            });
+        }
+
+        // --- Booking Modal (requires auth) ---
+        function showBookingModal(doctorId, doctorName) {
+            const today = new Date().toISOString().split('T')[0];
+            const root = document.getElementById('modalRoot');
+            root.innerHTML = `
+                <div class="modal-overlay" id="modalOverlay">
+                    <div class="modal">
+                        <h3>Book with Dr. ${doctorName}</h3>
+                        <div class="form-group"><label>Select Date</label><input type="date" id="bookDate" min="${today}" required></div>
+                        <div id="slotsArea"></div>
+                        <input type="hidden" id="selectedSlot">
+                        <div class="modal-actions">
+                            <button class="btn btn-secondary" id="closeBookModal">Cancel</button>
+                            <button class="btn btn-primary" id="confirmBookBtn" disabled>Confirm Booking</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.getElementById('closeBookModal').addEventListener('click', () => root.innerHTML = '');
+            document.getElementById('modalOverlay').addEventListener('click', (e) => { if (e.target.id === 'modalOverlay') root.innerHTML = ''; });
+
+            document.getElementById('bookDate').addEventListener('change', async (e) => {
+                const area = document.getElementById('slotsArea');
+                area.innerHTML = '<span class="spinner"></span>';
+                try {
+                    const res = await doctorAPI.checkAvailability(doctorId, e.target.value);
+                    const slots = res.data || [];
+                    if (!slots.length) { area.innerHTML = '<p class="text-muted">No available slots</p>'; return; }
+                    area.innerHTML = '<label style="display:block;margin-bottom:8px;font-size:13px;color:var(--text-secondary)">PICK A SLOT</label><div class="slot-grid">' +
+                        slots.map(s => `<button class="slot-btn" data-slot="${s}">${s}</button>`).join('') + '</div>';
+                    area.addEventListener('click', ev => {
+                        const sb = ev.target.closest('.slot-btn');
+                        if (!sb) return;
+                        area.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
+                        sb.classList.add('selected');
+                        document.getElementById('selectedSlot').value = sb.dataset.slot;
+                        document.getElementById('confirmBookBtn').disabled = false;
+                    });
+                } catch (err) { area.innerHTML = `<p class="text-muted">${err.message}</p>`; }
+            });
+
+            document.getElementById('confirmBookBtn').addEventListener('click', async () => {
+                const date = document.getElementById('bookDate').value;
+                const timeSlot = document.getElementById('selectedSlot').value;
+                if (!date || !timeSlot) return;
+                const btn = document.getElementById('confirmBookBtn');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> Booking...';
+                try {
+                    await appointmentAPI.book({ doctorId, date, timeSlot });
+                    showToast('Appointment booked successfully!', 'success');
+                    root.innerHTML = '';
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Confirm Booking';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
